@@ -2,16 +2,117 @@
 
 #include <gtest/gtest.h>
 
-TEST(memory_manager_tests, simple_tests) {
-    ASSERT_EQ(0, 0);
-    ASSERT_EQ(3, 3);
-    ASSERT_EQ(4+4, 8);
+#include <array>
+#include <cstddef>
+#include <cstring>
+
+namespace {
+
+constexpr std::size_t kMmapThreshold = 100 * 1024;
+
 }
 
-TEST(memory_manager_tests, sum_tests) {
-    ASSERT_EQ(sum(1, 2), 3);
-    ASSERT_EQ(sum(3, -3), 0);
-    ASSERT_EQ(sum(1, 0), 1);
+TEST(memory_manager_tests, malloc_returns_writable_memory) {
+    auto* ptr = static_cast<int*>(s_malloc(sizeof(int)));
 
-    ASSERT_NE(sum(1, 2), 0);
+    ASSERT_NE(ptr, nullptr);
+
+    *ptr = 5;
+    EXPECT_EQ(*ptr, 5);
+
+    *ptr += 1;
+    EXPECT_EQ(*ptr, 6);
+
+    s_free(ptr);
+}
+
+TEST(memory_manager_tests, independent_allocations_preserve_their_contents) {
+    constexpr std::size_t kAllocationCount = 8;
+    std::array<int*, kAllocationCount> ptrs{};
+
+    for (std::size_t i = 0; i < ptrs.size(); ++i) {
+        ptrs[i] = static_cast<int*>(s_malloc(sizeof(int)));
+        ASSERT_NE(ptrs[i], nullptr);
+        *ptrs[i] = static_cast<int>(i * 10);
+    }
+
+    for (std::size_t i = 0; i < ptrs.size(); ++i) {
+        EXPECT_EQ(*ptrs[i], static_cast<int>(i * 10));
+    }
+
+    for (auto* ptr : ptrs) {
+        s_free(ptr);
+    }
+}
+
+TEST(memory_manager_tests, freed_block_can_be_reused) {
+    auto* first = static_cast<unsigned char*>(s_malloc(128));
+    ASSERT_NE(first, nullptr);
+
+    std::memset(first, 0xAB, 128);
+    s_free(first);
+
+    auto* second = static_cast<unsigned char*>(s_malloc(128));
+    ASSERT_NE(second, nullptr);
+    EXPECT_EQ(second, first);
+
+    second[0] = 0x12;
+    second[127] = 0x34;
+    EXPECT_EQ(second[0], 0x12);
+    EXPECT_EQ(second[127], 0x34);
+
+    s_free(second);
+}
+
+TEST(memory_manager_tests, adjacent_freed_blocks_are_merged) {
+    auto* first = static_cast<unsigned char*>(s_malloc(128));
+    auto* second = static_cast<unsigned char*>(s_malloc(256));
+    auto* guard = static_cast<unsigned char*>(s_malloc(64));
+    ASSERT_NE(first, nullptr);
+    ASSERT_NE(second, nullptr);
+    ASSERT_NE(guard, nullptr);
+
+    s_free(first);
+    s_free(second);
+
+    auto* merged = static_cast<unsigned char*>(s_malloc(320));
+    ASSERT_NE(merged, nullptr);
+    EXPECT_EQ(merged, first);
+
+    merged[0] = 0xAA;
+    merged[319] = 0x55;
+    EXPECT_EQ(merged[0], 0xAA);
+    EXPECT_EQ(merged[319], 0x55);
+
+    s_free(merged);
+    s_free(guard);
+}
+
+TEST(memory_manager_tests, free_ignores_null_and_unknown_pointers) {
+    int stack_value = 42;
+
+    EXPECT_NO_FATAL_FAILURE(s_free(nullptr));
+    EXPECT_NO_FATAL_FAILURE(s_free(&stack_value));
+
+    auto* ptr = static_cast<int*>(s_malloc(sizeof(int)));
+    ASSERT_NE(ptr, nullptr);
+    *ptr = stack_value;
+    EXPECT_EQ(*ptr, stack_value);
+
+    s_free(ptr);
+}
+
+TEST(memory_manager_tests, allocations_at_or_above_mmap_threshold_are_not_implemented) {
+    EXPECT_EQ(s_malloc(kMmapThreshold), nullptr);
+    EXPECT_EQ(s_malloc(kMmapThreshold + 1), nullptr);
+}
+
+TEST(memory_manager_tests, calloc_and_realloc_are_not_implemented_yet) {
+    EXPECT_EQ(s_calloc(4, sizeof(int)), nullptr);
+
+    auto* ptr = static_cast<int*>(s_malloc(sizeof(int)));
+    ASSERT_NE(ptr, nullptr);
+
+    EXPECT_EQ(s_realloc(ptr, sizeof(int) * 2), nullptr);
+    s_free(ptr);
 }
