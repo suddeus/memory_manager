@@ -5,6 +5,7 @@
 #include <array>
 #include <cstddef>
 #include <cstring>
+#include <limits>
 
 namespace {
 
@@ -107,9 +108,54 @@ TEST(memory_manager_tests, allocations_at_or_above_mmap_threshold_are_not_implem
     EXPECT_EQ(s_malloc(kMmapThreshold + 1), nullptr);
 }
 
-TEST(memory_manager_tests, calloc_and_realloc_are_not_implemented_yet) {
-    EXPECT_EQ(s_calloc(4, sizeof(int)), nullptr);
+TEST(memory_manager_tests, calloc_returns_zero_initialized_writable_memory) {
+    constexpr std::size_t kElementCount = 16;
 
+    auto* ptr = static_cast<int*>(s_calloc(kElementCount, sizeof(int)));
+    ASSERT_NE(ptr, nullptr);
+
+    for (std::size_t i = 0; i < kElementCount; ++i) {
+        EXPECT_EQ(ptr[i], 0);
+    }
+
+    ptr[0] = 17;
+    ptr[kElementCount - 1] = 29;
+    EXPECT_EQ(ptr[0], 17);
+    EXPECT_EQ(ptr[kElementCount - 1], 29);
+
+    s_free(ptr);
+}
+
+TEST(memory_manager_tests, calloc_reused_memory_is_cleared_before_returning) {
+    constexpr std::size_t kSize = 64;
+
+    auto* original = static_cast<unsigned char*>(s_malloc(kSize));
+    ASSERT_NE(original, nullptr);
+    std::memset(original, 0xFF, kSize);
+    s_free(original);
+
+    auto* cleared = static_cast<unsigned char*>(s_calloc(kSize, sizeof(unsigned char)));
+    ASSERT_NE(cleared, nullptr);
+
+    for (std::size_t i = 0; i < kSize; ++i) {
+        EXPECT_EQ(cleared[i], 0);
+    }
+
+    s_free(cleared);
+}
+
+TEST(memory_manager_tests, calloc_returns_null_when_total_size_overflows) {
+    constexpr std::size_t kOverflowCount = std::numeric_limits<std::size_t>::max();
+
+    EXPECT_EQ(s_calloc(kOverflowCount, 2), nullptr);
+}
+
+TEST(memory_manager_tests, calloc_returns_null_for_unimplemented_mmap_sized_allocations) {
+    EXPECT_EQ(s_calloc(kMmapThreshold, sizeof(unsigned char)), nullptr);
+    EXPECT_EQ(s_calloc(kMmapThreshold / 2, 2), nullptr);
+}
+
+TEST(memory_manager_tests, realloc_is_not_implemented_yet) {
     auto* ptr = static_cast<int*>(s_malloc(sizeof(int)));
     ASSERT_NE(ptr, nullptr);
 

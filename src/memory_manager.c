@@ -1,6 +1,8 @@
 #include <memory_manager.h>
 
 #include "blocks.h"
+#include <stdint.h>
+#include <string.h>
 
 // Threshold above which memory is allocated using mmap
 // (if the size of the allocation is less than HEAP_MMAP_THRESHOLD,
@@ -30,8 +32,20 @@ void s_free(const void* ptr) {
     block_free(ptr);
 }
 
-void* s_calloc(size_t count, size_t size) {
-    return NULL;
+void* s_calloc(const size_t count, const size_t size) {
+    if (count != 0 && size > SIZE_MAX / count) {
+        // size_t overflow
+        return NULL;
+    }
+    const size_t total_size = size * count;
+    void* mem = s_malloc(total_size);
+
+    if (mem == NULL) {
+        return NULL;
+    }
+    memset(mem, 0, total_size);
+
+    return mem;
 }
 
 void* s_realloc(void* ptr, size_t size) {

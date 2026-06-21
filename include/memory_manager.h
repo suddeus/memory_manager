@@ -18,7 +18,10 @@ void* s_malloc(size_t size);
 // If pointer is not match to any allocated pointer, nothing happens
 void s_free(const void* ptr);
 
-// TODO
+// Allocate zero-initialized memory for an array of `count` elements,
+// each `size` bytes wide.
+// Returns a pointer to the allocated memory, or NULL if allocation fails
+// or if `count * size` overflows.
 void* s_calloc(size_t count, size_t size);
 
 // TODO
