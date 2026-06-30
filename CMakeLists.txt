@@ -23,6 +23,9 @@ add_library(memory_manager SHARED
 
         src/heap.h
         src/heap.c
+
+        src/avl_tree.h
+        src/avl_tree.c
 )
 target_compile_definitions(memory_manager PRIVATE DEBUG)
 

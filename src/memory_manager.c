@@ -1,6 +1,7 @@
 #include <memory_manager.h>
 
 #include "blocks.h"
+#include "avl_tree.h"
 
 #include <stdint.h>
 #include <string.h>
@@ -22,8 +23,7 @@ void* s_malloc(const size_t size) {
     if (size < HEAP_MMAP_THRESHOLD) {
         mem = block_add(size);
     } else {
-        // TODO: Implement mmap allocation
-        mem = NULL;
+        mem = avl_new_node(size);
     }
 
     return mem;
@@ -31,6 +31,7 @@ void* s_malloc(const size_t size) {
 
 void s_free(const void* ptr) {
     block_free(ptr);
+    avl_free(ptr);
 }
 
 void* s_calloc(const size_t count, const size_t size) {
@@ -63,8 +64,7 @@ void* s_realloc(void* ptr, size_t size) {
     if (size < HEAP_MMAP_THRESHOLD) {
         mem = block_realloc(ptr, size);
     } else {
-        // TODO: Implement mmap reallocation
-        mem = NULL;
+        mem = avl_realloc(ptr, size);
     }
 
     return mem;

@@ -103,9 +103,67 @@ TEST(memory_manager_tests, free_ignores_null_and_unknown_pointers) {
     s_free(ptr);
 }
 
-TEST(memory_manager_tests, allocations_at_or_above_mmap_threshold_are_not_implemented) {
-    EXPECT_EQ(s_malloc(kMmapThreshold), nullptr);
-    EXPECT_EQ(s_malloc(kMmapThreshold + 1), nullptr);
+TEST(memory_manager_tests, large_malloc_at_threshold_returns_writable_memory) {
+    auto* ptr = static_cast<unsigned char*>(s_malloc(kMmapThreshold));
+    ASSERT_NE(ptr, nullptr);
+
+    ptr[0] = 0x12;
+    ptr[kMmapThreshold / 2] = 0x34;
+    ptr[kMmapThreshold - 1] = 0x56;
+
+    EXPECT_EQ(ptr[0], 0x12);
+    EXPECT_EQ(ptr[kMmapThreshold / 2], 0x34);
+    EXPECT_EQ(ptr[kMmapThreshold - 1], 0x56);
+}
+
+TEST(memory_manager_tests, large_malloc_above_threshold_returns_writable_memory) {
+    constexpr std::size_t kLargeSize = kMmapThreshold + 4096;
+
+    auto* ptr = static_cast<unsigned char*>(s_malloc(kLargeSize));
+    ASSERT_NE(ptr, nullptr);
+
+    ptr[0] = 0xAB;
+    ptr[kMmapThreshold] = 0xCD;
+    ptr[kLargeSize - 1] = 0xEF;
+
+    EXPECT_EQ(ptr[0], 0xAB);
+    EXPECT_EQ(ptr[kMmapThreshold], 0xCD);
+    EXPECT_EQ(ptr[kLargeSize - 1], 0xEF);
+}
+
+TEST(memory_manager_tests, multiple_large_mallocs_return_independent_writable_memory) {
+    constexpr std::array<std::size_t, 3> kSizes{
+        kMmapThreshold,
+        kMmapThreshold + 1,
+        kMmapThreshold + 8192,
+    };
+
+    std::array<unsigned char*, kSizes.size()> ptrs{};
+
+    for (std::size_t i = 0; i < ptrs.size(); ++i) {
+        ptrs[i] = static_cast<unsigned char*>(s_malloc(kSizes[i]));
+        ASSERT_NE(ptrs[i], nullptr);
+
+        ptrs[i][0] = static_cast<unsigned char>(0x10 + i);
+        ptrs[i][kSizes[i] / 2] = static_cast<unsigned char>(0x20 + i);
+        ptrs[i][kSizes[i] - 1] = static_cast<unsigned char>(0x30 + i);
+    }
+
+    for (std::size_t i = 0; i < ptrs.size(); ++i) {
+        EXPECT_EQ(ptrs[i][0], static_cast<unsigned char>(0x10 + i));
+        EXPECT_EQ(ptrs[i][kSizes[i] / 2], static_cast<unsigned char>(0x20 + i));
+        EXPECT_EQ(ptrs[i][kSizes[i] - 1], static_cast<unsigned char>(0x30 + i));
+    }
+}
+
+TEST(memory_manager_tests, free_accepts_large_allocated_pointer) {
+    auto* ptr = static_cast<unsigned char*>(s_malloc(kMmapThreshold));
+    ASSERT_NE(ptr, nullptr);
+
+    ptr[0] = 0xA5;
+    ptr[kMmapThreshold - 1] = 0x5A;
+
+    EXPECT_NO_FATAL_FAILURE(s_free(ptr));
 }
 
 TEST(memory_manager_tests, calloc_returns_zero_initialized_writable_memory) {
@@ -150,9 +208,40 @@ TEST(memory_manager_tests, calloc_returns_null_when_total_size_overflows) {
     EXPECT_EQ(s_calloc(kOverflowCount, 2), nullptr);
 }
 
-TEST(memory_manager_tests, calloc_returns_null_for_unimplemented_mmap_sized_allocations) {
-    EXPECT_EQ(s_calloc(kMmapThreshold, sizeof(unsigned char)), nullptr);
-    EXPECT_EQ(s_calloc(kMmapThreshold / 2, 2), nullptr);
+TEST(memory_manager_tests, large_calloc_returns_zero_initialized_writable_memory) {
+    constexpr std::size_t kElementCount = kMmapThreshold / sizeof(int);
+
+    auto* ptr = static_cast<int*>(s_calloc(kElementCount, sizeof(int)));
+    ASSERT_NE(ptr, nullptr);
+
+    EXPECT_EQ(ptr[0], 0);
+    EXPECT_EQ(ptr[kElementCount / 2], 0);
+    EXPECT_EQ(ptr[kElementCount - 1], 0);
+
+    ptr[0] = 11;
+    ptr[kElementCount / 2] = 22;
+    ptr[kElementCount - 1] = 33;
+
+    EXPECT_EQ(ptr[0], 11);
+    EXPECT_EQ(ptr[kElementCount / 2], 22);
+    EXPECT_EQ(ptr[kElementCount - 1], 33);
+}
+
+TEST(memory_manager_tests, large_calloc_above_threshold_returns_zero_initialized_memory) {
+    constexpr std::size_t kElementCount = (kMmapThreshold + 4096) / sizeof(int);
+
+    auto* ptr = static_cast<int*>(s_calloc(kElementCount, sizeof(int)));
+    ASSERT_NE(ptr, nullptr);
+
+    EXPECT_EQ(ptr[0], 0);
+    EXPECT_EQ(ptr[kElementCount / 2], 0);
+    EXPECT_EQ(ptr[kElementCount - 1], 0);
+
+    ptr[0] = 101;
+    ptr[kElementCount - 1] = 202;
+
+    EXPECT_EQ(ptr[0], 101);
+    EXPECT_EQ(ptr[kElementCount - 1], 202);
 }
 
 TEST(memory_manager_tests, realloc_null_pointer_behaves_like_malloc) {
@@ -163,6 +252,17 @@ TEST(memory_manager_tests, realloc_null_pointer_behaves_like_malloc) {
     EXPECT_EQ(*ptr, 42);
 
     s_free(ptr);
+}
+
+TEST(memory_manager_tests, realloc_null_pointer_with_large_size_behaves_like_malloc) {
+    auto* ptr = static_cast<unsigned char*>(s_realloc(nullptr, kMmapThreshold));
+    ASSERT_NE(ptr, nullptr);
+
+    ptr[0] = 0x44;
+    ptr[kMmapThreshold - 1] = 0x88;
+
+    EXPECT_EQ(ptr[0], 0x44);
+    EXPECT_EQ(ptr[kMmapThreshold - 1], 0x88);
 }
 
 TEST(memory_manager_tests, realloc_zero_size_frees_pointer_and_returns_null) {

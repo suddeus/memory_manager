@@ -25,7 +25,7 @@ void view_blocks() {
     printf("—————————————————————————————\n");
 }
 
-void* get_ptr_to_data(const memory_block_t* block) {
+void* block_get_ptr_to_data(const memory_block_t* block) {
     return (void*)block + sizeof(memory_block_t);
 }
 
@@ -40,7 +40,7 @@ void* block_split(memory_block_t* parent_block, const size_t first_child_size) {
     }
 
     memory_block_t* first_child = parent_block;
-    memory_block_t* second_child = get_ptr_to_data(parent_block) + first_child_size;
+    memory_block_t* second_child = block_get_ptr_to_data(parent_block) + first_child_size;
 
     second_child->size = parent_block->size - sizeof(memory_block_t) - first_child_size;
     second_child->is_free = true;
@@ -77,7 +77,7 @@ memory_block_t* find_block(const void* ptr) {
     }
 
     for (memory_block_t* it = head_block; it != NULL; it = it->next) {
-        if (get_ptr_to_data(it) == ptr) {
+        if (block_get_ptr_to_data(it) == ptr) {
             return it;
         }
     }
@@ -128,13 +128,13 @@ void* block_add(const size_t size) {
             tail_block = it->next;
         }
 
-        return get_ptr_to_data(it);
+        return block_get_ptr_to_data(it);
     }
 
     if (!tail_block->is_free) {
         const long heap_extended_size = extend_heap();
 
-        memory_block_t* new_block = get_ptr_to_data(tail_block) + tail_block->size;
+        memory_block_t* new_block = block_get_ptr_to_data(tail_block) + tail_block->size;
 
         new_block->size = heap_extended_size - sizeof(memory_block_t);
         new_block->is_free = true;
@@ -158,7 +158,7 @@ void* block_add(const size_t size) {
 
     tail_block = new_block->next;
 
-    return get_ptr_to_data(new_block);
+    return block_get_ptr_to_data(new_block);
 }
 
 void block_free(const void* ptr) {
@@ -169,7 +169,7 @@ void block_free(const void* ptr) {
     memory_block_t* prev_block = NULL;
 
     for (memory_block_t* it = head_block; it != NULL; prev_block = it, it = it->next) {
-        if (get_ptr_to_data(it) != ptr) {
+        if (block_get_ptr_to_data(it) != ptr) {
             continue;
         }
 
@@ -213,10 +213,10 @@ void* block_realloc(void* ptr, const size_t size) {
     }
 
     memcpy(
-      get_ptr_to_data(new_block),
-      get_ptr_to_data(active_block),
+      block_get_ptr_to_data(new_block),
+      block_get_ptr_to_data(active_block),
       (new_block->size < active_block->size) ? new_block->size : active_block->size
     );
 
-    return get_ptr_to_data(new_block);
+    return block_get_ptr_to_data(new_block);
 }
