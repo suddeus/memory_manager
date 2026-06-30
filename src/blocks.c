@@ -3,6 +3,7 @@
 #include "heap.h"
 #include <stddef.h>
 #include <stdio.h>
+#include <string.h>
 
 static memory_block_t* head_block = NULL;
 static memory_block_t* tail_block = NULL;
@@ -24,6 +25,10 @@ void view_blocks() {
     printf("—————————————————————————————\n");
 }
 
+void* get_ptr_to_data(const memory_block_t* block) {
+    return (void*)block + sizeof(memory_block_t);
+}
+
 // Only free blocks can be split
 void* block_split(memory_block_t* parent_block, const size_t first_child_size) {
     if (parent_block == NULL) {
@@ -35,7 +40,7 @@ void* block_split(memory_block_t* parent_block, const size_t first_child_size) {
     }
 
     memory_block_t* first_child = parent_block;
-    memory_block_t* second_child = (void*)parent_block + sizeof(memory_block_t) + first_child_size;
+    memory_block_t* second_child = get_ptr_to_data(parent_block) + first_child_size;
 
     second_child->size = parent_block->size - sizeof(memory_block_t) - first_child_size;
     second_child->is_free = true;
@@ -64,6 +69,34 @@ void* block_merge_with_next(memory_block_t* ptr) {
     ptr->next = ptr->next->next;
 
     return ptr;
+}
+
+memory_block_t* find_block(const void* ptr) {
+    if (head_block == NULL) {
+        return NULL;
+    }
+
+    for (memory_block_t* it = head_block; it != NULL; it = it->next) {
+        if (get_ptr_to_data(it) == ptr) {
+            return it;
+        }
+    }
+
+    return NULL;
+}
+
+memory_block_t* get_parent_block(const memory_block_t* block) {
+    if (block == NULL) {
+        return NULL;
+    }
+
+    for (memory_block_t* it = head_block; it->next != NULL; it = it->next) {
+        if (it->next == block) {
+            return it;
+        }
+    }
+
+    return NULL;
 }
 
 void list_init() {
@@ -95,13 +128,13 @@ void* block_add(const size_t size) {
             tail_block = it->next;
         }
 
-        return (void*)it + sizeof(memory_block_t);
+        return get_ptr_to_data(it);
     }
 
     if (!tail_block->is_free) {
         const long heap_extended_size = extend_heap();
 
-        memory_block_t* new_block = (void*)tail_block + sizeof(memory_block_t) + tail_block->size;
+        memory_block_t* new_block = get_ptr_to_data(tail_block) + tail_block->size;
 
         new_block->size = heap_extended_size - sizeof(memory_block_t);
         new_block->is_free = true;
@@ -125,7 +158,7 @@ void* block_add(const size_t size) {
 
     tail_block = new_block->next;
 
-    return (void*)new_block + sizeof(memory_block_t);
+    return get_ptr_to_data(new_block);
 }
 
 void block_free(const void* ptr) {
@@ -136,7 +169,7 @@ void block_free(const void* ptr) {
     memory_block_t* prev_block = NULL;
 
     for (memory_block_t* it = head_block; it != NULL; prev_block = it, it = it->next) {
-        if ((void*)it + sizeof(memory_block_t) != ptr) {
+        if (get_ptr_to_data(it) != ptr) {
             continue;
         }
 
@@ -156,4 +189,34 @@ void block_free(const void* ptr) {
 
         return;
     }
+}
+
+void* block_realloc(void* ptr, const size_t size) {
+    if (head_block == NULL) {
+        return NULL;
+    }
+
+    const memory_block_t* active_block = find_block(ptr);
+
+    if (active_block == NULL || active_block->is_free) {
+        return block_add(size);
+    }
+
+    if (size == active_block->size) {
+        return ptr;
+    }
+
+    const memory_block_t* new_block = block_add(size) - sizeof(memory_block_t);
+
+    if (new_block == NULL) {
+        return NULL;
+    }
+
+    memcpy(
+      get_ptr_to_data(new_block),
+      get_ptr_to_data(active_block),
+      (new_block->size < active_block->size) ? new_block->size : active_block->size
+    );
+
+    return get_ptr_to_data(new_block);
 }

@@ -1,6 +1,7 @@
 #include <memory_manager.h>
 
 #include "blocks.h"
+
 #include <stdint.h>
 #include <string.h>
 
@@ -49,5 +50,22 @@ void* s_calloc(const size_t count, const size_t size) {
 }
 
 void* s_realloc(void* ptr, size_t size) {
-    return NULL;
+    if (ptr == NULL) {
+        return s_malloc(size);
+    }
+    if (size == 0) {
+        s_free(ptr);
+        return NULL;
+    }
+
+    void* mem = NULL;
+
+    if (size < HEAP_MMAP_THRESHOLD) {
+        mem = block_realloc(ptr, size);
+    } else {
+        // TODO: Implement mmap reallocation
+        mem = NULL;
+    }
+
+    return mem;
 }

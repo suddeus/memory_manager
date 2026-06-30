@@ -155,10 +155,103 @@ TEST(memory_manager_tests, calloc_returns_null_for_unimplemented_mmap_sized_allo
     EXPECT_EQ(s_calloc(kMmapThreshold / 2, 2), nullptr);
 }
 
-TEST(memory_manager_tests, realloc_is_not_implemented_yet) {
+TEST(memory_manager_tests, realloc_null_pointer_behaves_like_malloc) {
+    auto* ptr = static_cast<int*>(s_realloc(nullptr, sizeof(int)));
+    ASSERT_NE(ptr, nullptr);
+
+    *ptr = 42;
+    EXPECT_EQ(*ptr, 42);
+
+    s_free(ptr);
+}
+
+TEST(memory_manager_tests, realloc_zero_size_frees_pointer_and_returns_null) {
+    auto* ptr = static_cast<int*>(s_malloc(sizeof(int)));
+    ASSERT_NE(ptr, nullptr);
+    *ptr = 42;
+
+    EXPECT_EQ(s_realloc(ptr, 0), nullptr);
+
+    auto* reused = static_cast<int*>(s_malloc(sizeof(int)));
+    ASSERT_NE(reused, nullptr);
+    EXPECT_EQ(reused, ptr);
+
+    s_free(reused);
+}
+
+TEST(memory_manager_tests, realloc_same_size_returns_same_pointer_and_preserves_data) {
+    constexpr std::size_t kSize = 32;
+
+    auto* ptr = static_cast<unsigned char*>(s_malloc(kSize));
+    ASSERT_NE(ptr, nullptr);
+
+    for (std::size_t i = 0; i < kSize; ++i) {
+        ptr[i] = static_cast<unsigned char>(i + 1);
+    }
+
+    auto* resized = static_cast<unsigned char*>(s_realloc(ptr, kSize));
+    ASSERT_NE(resized, nullptr);
+    EXPECT_EQ(resized, ptr);
+
+    for (std::size_t i = 0; i < kSize; ++i) {
+        EXPECT_EQ(resized[i], static_cast<unsigned char>(i + 1));
+    }
+
+    s_free(resized);
+}
+
+TEST(memory_manager_tests, realloc_larger_block_preserves_existing_contents) {
+    constexpr std::size_t kOldSize = 32;
+    constexpr std::size_t kNewSize = 96;
+
+    auto* ptr = static_cast<unsigned char*>(s_malloc(kOldSize));
+    ASSERT_NE(ptr, nullptr);
+
+    for (std::size_t i = 0; i < kOldSize; ++i) {
+        ptr[i] = static_cast<unsigned char>(0xA0 + i);
+    }
+
+    auto* resized = static_cast<unsigned char*>(s_realloc(ptr, kNewSize));
+    ASSERT_NE(resized, nullptr);
+
+    for (std::size_t i = 0; i < kOldSize; ++i) {
+        EXPECT_EQ(resized[i], static_cast<unsigned char>(0xA0 + i));
+    }
+
+    resized[kNewSize - 1] = 0x5A;
+    EXPECT_EQ(resized[kNewSize - 1], 0x5A);
+
+    s_free(resized);
+}
+
+TEST(memory_manager_tests, realloc_smaller_block_preserves_truncated_contents) {
+    constexpr std::size_t kOldSize = 96;
+    constexpr std::size_t kNewSize = 32;
+
+    auto* ptr = static_cast<unsigned char*>(s_malloc(kOldSize));
+    ASSERT_NE(ptr, nullptr);
+
+    for (std::size_t i = 0; i < kOldSize; ++i) {
+        ptr[i] = static_cast<unsigned char>(0x10 + i);
+    }
+
+    auto* resized = static_cast<unsigned char*>(s_realloc(ptr, kNewSize));
+    ASSERT_NE(resized, nullptr);
+
+    for (std::size_t i = 0; i < kNewSize; ++i) {
+        EXPECT_EQ(resized[i], static_cast<unsigned char>(0x10 + i));
+    }
+
+    s_free(resized);
+}
+
+TEST(memory_manager_tests, realloc_returns_null_for_unimplemented_mmap_sized_allocations) {
     auto* ptr = static_cast<int*>(s_malloc(sizeof(int)));
     ASSERT_NE(ptr, nullptr);
 
-    EXPECT_EQ(s_realloc(ptr, sizeof(int) * 2), nullptr);
+    *ptr = 123;
+    EXPECT_EQ(s_realloc(ptr, kMmapThreshold), nullptr);
+    EXPECT_EQ(*ptr, 123);
+
     s_free(ptr);
 }
