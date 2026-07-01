@@ -30,8 +30,12 @@ void* s_malloc(const size_t size) {
 }
 
 void s_free(const void* ptr) {
-    block_free(ptr);
-    avl_free(ptr);
+    if (is_in_blocks(ptr)) {
+        block_free(ptr);
+    }
+    if (is_in_avl(ptr)) {
+        avl_free(ptr);
+    }
 }
 
 void* s_calloc(const size_t count, const size_t size) {
@@ -59,13 +63,24 @@ void* s_realloc(void* ptr, size_t size) {
         return NULL;
     }
 
-    void* mem = NULL;
+    const bool was_in_avl = is_in_avl(ptr);
+    const bool was_in_blocks = is_in_blocks(ptr);
 
-    if (size < HEAP_MMAP_THRESHOLD) {
-        mem = block_realloc(ptr, size);
-    } else {
-        mem = avl_realloc(ptr, size);
+    if (!was_in_blocks && !was_in_avl) {
+        return NULL;
     }
+
+    const size_t old_size = was_in_avl ? get_node_size(ptr) : get_block_size(ptr);
+
+    if (old_size == size) {
+        return ptr;
+    }
+
+    void* mem = s_malloc(size);
+
+    memcpy(mem, ptr, old_size < size ? old_size : size);
+
+    s_free(ptr);
 
     return mem;
 }

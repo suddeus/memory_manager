@@ -156,16 +156,6 @@ TEST(memory_manager_tests, multiple_large_mallocs_return_independent_writable_me
     }
 }
 
-TEST(memory_manager_tests, free_accepts_large_allocated_pointer) {
-    auto* ptr = static_cast<unsigned char*>(s_malloc(kMmapThreshold));
-    ASSERT_NE(ptr, nullptr);
-
-    ptr[0] = 0xA5;
-    ptr[kMmapThreshold - 1] = 0x5A;
-
-    EXPECT_NO_FATAL_FAILURE(s_free(ptr));
-}
-
 TEST(memory_manager_tests, calloc_returns_zero_initialized_writable_memory) {
     constexpr std::size_t kElementCount = 16;
 
@@ -345,13 +335,114 @@ TEST(memory_manager_tests, realloc_smaller_block_preserves_truncated_contents) {
     s_free(resized);
 }
 
-TEST(memory_manager_tests, realloc_returns_null_for_unimplemented_mmap_sized_allocations) {
-    auto* ptr = static_cast<int*>(s_malloc(sizeof(int)));
+TEST(memory_manager_tests, realloc_large_same_size_returns_same_pointer_and_preserves_data) {
+    auto* ptr = static_cast<unsigned char*>(s_malloc(kMmapThreshold));
     ASSERT_NE(ptr, nullptr);
 
-    *ptr = 123;
-    EXPECT_EQ(s_realloc(ptr, kMmapThreshold), nullptr);
-    EXPECT_EQ(*ptr, 123);
+    ptr[0] = 0x10;
+    ptr[kMmapThreshold / 2] = 0x20;
+    ptr[kMmapThreshold - 1] = 0x30;
 
-    s_free(ptr);
+    auto* resized = static_cast<unsigned char*>(s_realloc(ptr, kMmapThreshold));
+    ASSERT_NE(resized, nullptr);
+    EXPECT_EQ(resized, ptr);
+
+    EXPECT_EQ(resized[0], 0x10);
+    EXPECT_EQ(resized[kMmapThreshold / 2], 0x20);
+    EXPECT_EQ(resized[kMmapThreshold - 1], 0x30);
+}
+
+TEST(memory_manager_tests, realloc_large_block_to_larger_size_preserves_existing_contents) {
+    constexpr std::size_t kOldSize = kMmapThreshold;
+    constexpr std::size_t kNewSize = kMmapThreshold + 8192;
+
+    auto* ptr = static_cast<unsigned char*>(s_malloc(kOldSize));
+    ASSERT_NE(ptr, nullptr);
+
+    ptr[0] = 0xA1;
+    ptr[kOldSize / 2] = 0xB2;
+    ptr[kOldSize - 1] = 0xC3;
+
+    auto* resized = static_cast<unsigned char*>(s_realloc(ptr, kNewSize));
+    ASSERT_NE(resized, nullptr);
+
+    EXPECT_EQ(resized[0], 0xA1);
+    EXPECT_EQ(resized[kOldSize / 2], 0xB2);
+    EXPECT_EQ(resized[kOldSize - 1], 0xC3);
+
+    resized[kNewSize - 1] = 0xD4;
+    EXPECT_EQ(resized[kNewSize - 1], 0xD4);
+}
+
+TEST(memory_manager_tests, realloc_large_block_to_smaller_large_size_preserves_truncated_contents) {
+    constexpr std::size_t kOldSize = kMmapThreshold + 8192;
+    constexpr std::size_t kNewSize = kMmapThreshold;
+
+    auto* ptr = static_cast<unsigned char*>(s_malloc(kOldSize));
+    ASSERT_NE(ptr, nullptr);
+
+    ptr[0] = 0x1A;
+    ptr[kNewSize / 2] = 0x2B;
+    ptr[kNewSize - 1] = 0x3C;
+    ptr[kOldSize - 1] = 0x4D;
+
+    auto* resized = static_cast<unsigned char*>(s_realloc(ptr, kNewSize));
+    ASSERT_NE(resized, nullptr);
+
+    EXPECT_EQ(resized[0], 0x1A);
+    EXPECT_EQ(resized[kNewSize / 2], 0x2B);
+    EXPECT_EQ(resized[kNewSize - 1], 0x3C);
+}
+
+TEST(memory_manager_tests, realloc_small_block_to_large_size_preserves_existing_contents) {
+    constexpr std::size_t kOldSize = 64;
+    constexpr std::size_t kNewSize = kMmapThreshold;
+
+    auto* ptr = static_cast<unsigned char*>(s_malloc(kOldSize));
+    ASSERT_NE(ptr, nullptr);
+
+    for (std::size_t i = 0; i < kOldSize; ++i) {
+        ptr[i] = static_cast<unsigned char>(0x40 + i);
+    }
+
+    auto* resized = static_cast<unsigned char*>(s_realloc(ptr, kNewSize));
+    ASSERT_NE(resized, nullptr);
+
+    for (std::size_t i = 0; i < kOldSize; ++i) {
+        EXPECT_EQ(resized[i], static_cast<unsigned char>(0x40 + i));
+    }
+
+    resized[kNewSize - 1] = 0x7F;
+    EXPECT_EQ(resized[kNewSize - 1], 0x7F);
+}
+
+TEST(memory_manager_tests, realloc_large_block_to_small_size_preserves_truncated_contents) {
+    constexpr std::size_t kOldSize = kMmapThreshold;
+    constexpr std::size_t kNewSize = 64;
+
+    auto* ptr = static_cast<unsigned char*>(s_malloc(kOldSize));
+    ASSERT_NE(ptr, nullptr);
+
+    for (std::size_t i = 0; i < kNewSize; ++i) {
+        ptr[i] = static_cast<unsigned char>(0x80 + i);
+    }
+
+    auto* resized = static_cast<unsigned char*>(s_realloc(ptr, kNewSize));
+    ASSERT_NE(resized, nullptr);
+
+    for (std::size_t i = 0; i < kNewSize; ++i) {
+        EXPECT_EQ(resized[i], static_cast<unsigned char>(0x80 + i));
+    }
+
+    s_free(resized);
+}
+
+TEST(memory_manager_tests, free_accepts_large_allocated_pointer) {
+    auto* ptr = static_cast<unsigned char*>(s_malloc(kMmapThreshold));
+    ASSERT_NE(ptr, nullptr);
+
+    ptr[0] = 0xA5;
+    ptr[kMmapThreshold - 1] = 0x5A;
+
+    EXPECT_NO_FATAL_FAILURE(s_free(ptr));
 }

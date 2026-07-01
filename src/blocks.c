@@ -191,32 +191,19 @@ void block_free(const void* ptr) {
     }
 }
 
-void* block_realloc(void* ptr, const size_t size) {
+bool is_in_blocks(const void* ptr) {
     if (head_block == NULL) {
-        return NULL;
+        return false;
+    }
+
+    return find_block(ptr) != NULL;
+}
+
+size_t get_block_size(const void* ptr) {
+    if (head_block == NULL) {
+        return 0;
     }
 
     const memory_block_t* active_block = find_block(ptr);
-
-    if (active_block == NULL || active_block->is_free) {
-        return block_add(size);
-    }
-
-    if (size == active_block->size) {
-        return ptr;
-    }
-
-    const memory_block_t* new_block = block_add(size) - sizeof(memory_block_t);
-
-    if (new_block == NULL) {
-        return NULL;
-    }
-
-    memcpy(
-      block_get_ptr_to_data(new_block),
-      block_get_ptr_to_data(active_block),
-      (new_block->size < active_block->size) ? new_block->size : active_block->size
-    );
-
-    return block_get_ptr_to_data(new_block);
+    return (active_block != NULL && !active_block->is_free) ? active_block->size : 0;
 }

@@ -1,12 +1,13 @@
 #include "avl_tree.h"
 
 #include <sys/mman.h>
+#include <string.h>
 
 const size_t AVL_NODE_HEADER_SIZE = sizeof(avl_node_t);
 
 static avl_node_t* avl_root = NULL;
 
-void* avl_get_ptr_to_data(avl_node_t* node) {
+void* avl_get_ptr_to_data(const avl_node_t* node) {
     if (!node) {
         return NULL;
     }
@@ -20,7 +21,7 @@ avl_node_t* find_node(const void* ptr) {
         if (avl_get_ptr_to_data(node) == ptr) {
             return node;
         }
-        if (avl_get_ptr_to_data(node) < ptr) {
+        if (ptr < avl_get_ptr_to_data(node)) {
             node = node->left;
         } else {
             node = node->right;
@@ -130,7 +131,7 @@ avl_node_t* avl_insert(avl_node_t* node, avl_node_t* new_node) {
     }
 
     update_height(node);
-    rebalance(node);
+    node = rebalance(node);
 
     return node;
 }
@@ -203,10 +204,23 @@ void* avl_new_node(const size_t size) {
 void avl_free(const void* ptr) {
     avl_node_t* node = find_node(ptr);
     if (node) {
-        remove_node(avl_root, node);
+        avl_root = remove_node(avl_root, node);
     }
 }
 
-void* avl_realloc(void* ptr, const size_t size) {
-    return NULL;
+bool is_in_avl(const void* ptr) {
+    if (avl_root == NULL) {
+        return false;
+    }
+
+    return find_node(ptr) != NULL;
+}
+
+size_t get_node_size(const void* ptr) {
+    if (avl_root == NULL) {
+        return 0;
+    }
+
+    const avl_node_t* node = find_node(ptr);
+    return node ? node->size : 0;
 }

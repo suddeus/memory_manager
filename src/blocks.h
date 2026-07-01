@@ -25,4 +25,6 @@ void* block_add(size_t size);
 
 void block_free(const void* ptr);
 
-void* block_realloc(void* ptr, size_t size);
+bool is_in_blocks(const void* ptr);
+
+size_t get_block_size(const void* ptr);
