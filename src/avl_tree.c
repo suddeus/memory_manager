@@ -124,7 +124,7 @@ avl_node_t* avl_insert(avl_node_t* node, avl_node_t* new_node) {
 
     if (new_node < node) {
         node->left = avl_insert(node->left, new_node);
-    } else if (new_node < node) {
+    } else if (new_node > node) {
         node->right = avl_insert(node->right, new_node);
     } else {
         return node;
