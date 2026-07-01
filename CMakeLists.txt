@@ -17,14 +17,8 @@ enable_testing()
 # library
 add_library(memory_manager SHARED
         src/memory_manager.c
-
-        src/blocks.h
         src/blocks.c
-
-        src/heap.h
         src/heap.c
-
-        src/avl_tree.h
         src/avl_tree.c
 )
 target_compile_definitions(memory_manager PRIVATE DEBUG)
